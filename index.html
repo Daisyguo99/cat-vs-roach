@@ -1,129 +1,69 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cat vs Cockroach</title>
-  <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      background: #0f1221;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: manipulation;
-      font-family: Arial, sans-serif;
-    }
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat vs Roach</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: #f9f4d7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 600px;
+            max-height: 800px;
+        }
+        #cat, #roach {
+            position: absolute;
+            transition: all 0.5s ease;
+        }
+        #cat {
+            width: 80px;
+            top: 50%;
+            left: 10%;
+        }
+        #roach {
+            width: 40px;
+            top: 50%;
+            left: 80%;
+            animation: roachMove 5s linear infinite;
+        }
+        @keyframes roachMove {
+            0% { left: 80%; }
+            50% { left: 50%; top: 60%; }
+            100% { left: 80%; top: 40%; }
+        }
+    </style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
 
-    let W = window.innerWidth;
-    let H = window.innerHeight;
-    canvas.width = W;
-    canvas.height = H;
+    <div class="game-container">
+        <img id="cat" src="https://example.com/cat.png" alt="Cat">
+        <img id="roach" src="https://example.com/roach.png" alt="Roach">
+    </div>
 
-    function resize() {
-      W = window.innerWidth;
-      H = window.innerHeight;
-      canvas.width = W;
-      canvas.height = H;
-    }
-    window.addEventListener('resize', resize);
+    <script>
+        const cat = document.getElementById("cat");
+        const roach = document.getElementById("roach");
 
-    let cat = { x: W / 2, y: H / 2, radius: 30, target: null };
-    let roach = { x: Math.random() * W, y: Math.random() * H, radius: 20, alive: true };
-    let score = 0;
+        document.querySelector('.game-container').addEventListener('click', function(event) {
+            const x = event.clientX;
+            const y = event.clientY;
 
-    canvas.addEventListener("touchstart", function(e) {
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches[0];
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
+            // Move the cat to clicked position
+            cat.style.left = `${x - cat.offsetWidth / 2}px`;
+            cat.style.top = `${y - cat.offsetHeight / 2}px`;
+        });
+    </script>
 
-      cat.target = { x, y };
-      e.preventDefault();
-    }, { passive: false });
-
-    function moveCat(dt) {
-      if (!cat.target) return;
-      const dx = cat.target.x - cat.x;
-      const dy = cat.target.y - cat.y;
-      const dist = Math.hypot(dx, dy);
-      const speed = 300; // px/sec
-      if (dist < speed * dt) {
-        cat.x = cat.target.x;
-        cat.y = cat.target.y;
-        cat.target = null;
-      } else {
-        cat.x += (dx / dist) * speed * dt;
-        cat.y += (dy / dist) * speed * dt;
-      }
-    }
-
-    function checkCollision() {
-      if (!roach.alive) return;
-      const dx = cat.x - roach.x;
-      const dy = cat.y - roach.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < cat.radius + roach.radius) {
-        roach.alive = false;
-        score++;
-        setTimeout(() => {
-          roach.x = Math.random() * W;
-          roach.y = Math.random() * H;
-          roach.alive = true;
-        }, 500);
-      }
-    }
-
-    function draw() {
-      ctx.fillStyle = "#0f1221";
-      ctx.fillRect(0, 0, W, H);
-
-      // draw roach
-      if (roach.alive) {
-        ctx.fillStyle = "brown";
-        ctx.beginPath();
-        ctx.arc(roach.x, roach.y, roach.radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // draw cat
-      ctx.fillStyle = "orange";
-      ctx.beginPath();
-      ctx.arc(cat.x, cat.y, cat.radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // draw score
-      ctx.fillStyle = "white";
-      ctx.font = "20px Arial";
-      ctx.fillText("Score: " + score, 20, 30);
-    }
-
-    let lastTime = null;
-    function gameLoop(timestamp) {
-      if (!lastTime) lastTime = timestamp;
-      const dt = (timestamp - lastTime) / 1000;
-      lastTime = timestamp;
-
-      moveCat(dt);
-      checkCollision();
-      draw();
-
-      requestAnimationFrame(gameLoop);
-    }
-    requestAnimationFrame(gameLoop);
-  </script>
 </body>
 </html>
