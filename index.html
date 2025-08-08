@@ -1,700 +1,129 @@
 
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>猫咪抓蟑螂：连击 & Boss 版</title>
+  <title>Cat vs Cockroach</title>
   <style>
     html, body {
       margin: 0;
       height: 100%;
       background: #0f1221;
-      color: #fff;
       user-select: none;
       -webkit-user-select: none;
       touch-action: manipulation;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-family: Arial, sans-serif;
     }
-    #hud {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      right: 12px;
-      display: grid;
-      grid-template-columns: 1fr auto auto auto auto;
-      gap: 12px;
-      align-items: center;
-      z-index: 3;
-    }
-    .pill {
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.15);
-      backdrop-filter: blur(6px);
-      padding: 8px 12px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      white-space: nowrap;
-    }
-    button, select {
-      background: #2a2f4a;
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 10px;
-      padding: 8px 12px;
-      cursor: pointer;
-    }
-    button:hover { filter: brightness(1.1); }
-    #canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
+    canvas {
       display: block;
-    }
-    #help {
-      position: fixed;
-      bottom: 12px;
-      left: 12px;
-      right: 12px;
-      text-align: center;
-      opacity: 0.8;
-      font-size: 14px;
-      z-index: 2;
-    }
-    #comboFloat {
-      position: fixed;
-      top: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-weight: 800;
-      font-size: 28px;
-      letter-spacing: 1px;
-      text-shadow: 0 2px 6px rgba(0,0,0,0.5);
-      opacity: 0;
-      transition: opacity .2s, transform .2s;
-      z-index: 2;
-      pointer-events: none;
-    }
-    #leaderboardPanel {
-      position: fixed;
-      right: 12px;
-      top: 70px;
-      width: 220px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 12px;
-      padding: 10px 12px;
-      font-size: 13px;
-      z-index: 2;
-    }
-    #leaderboardPanel h3 {
-      margin: 0 0 8px 0;
-      font-size: 14px;
-      opacity: .9;
-    }
-    #leaderboardPanel ol {
-      padding-left: 18px;
-      margin: 0;
-    }
-    #toast {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%,-50%);
-      background: rgba(0,0,0,.55);
-      border: 1px solid rgba(255,255,255,.2);
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 14px;
-      opacity: 0;
-      transition: opacity .2s;
-      z-index: 5;
-      pointer-events: none;
-    }
-    #bossBar {
-      position: fixed;
-      top: 48px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(560px, 80vw);
-      height: 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.12);
-      overflow: hidden;
-      display: none;
-      z-index: 3;
-    }
-    #bossBarInner {
-      height: 100%;
-      width: 100%;
-      background: linear-gradient(90deg,#ff6a6a,#ffc36a);
-      transform: scaleX(1);
-      transform-origin: left center;
+      width: 100vw;
+      height: 100vh;
     }
   </style>
 </head>
 <body>
-  <div id="hud">
-    <div class="pill">分数：<span id="score">0</span></div>
-    <div class="pill">时间：<span id="timer">60.0</span>s</div>
-    <div class="pill">连击：<span id="combo">x1</span></div>
-    <div class="pill">难度：
-      <select id="difficulty">
-        <option value="easy">简单</option>
-        <option value="normal" selected>标准</option>
-        <option value="hard">困难</option>
-      </select>
-    </div>
-    <div class="pill"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-      <input type="checkbox" id="sfx" checked /> 音效
-    </label></div>
-    <button id="restart">重新开始</button>
-    <button id="pause">暂停</button>
-  </div>
-  <div id="bossBar"><div id="bossBarInner"></div></div>
-  <div id="leaderboardPanel">
-    <h3>本地排行榜</h3>
-    <ol id="lbList"></ol>
-  </div>
-  <div id="comboFloat"></div>
   <canvas id="canvas"></canvas>
-  <div id="help">提示：点击<strong>蟑螂</strong>，猫咪会扑上去。抓到就加分！有几率掉落<span style="font-weight:700;">鱼</span>（+5s）。每<strong>8只</strong>出现一只<strong>Boss蟑螂</strong>，需要多次命中。</div>
-  <div id="toast"></div>
-
   <script>
-    // ===== Canvas & basic =====
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const scoreEl = document.getElementById('score');
-    const timerEl = document.getElementById('timer');
-    const comboEl = document.getElementById('combo');
-    const restartBtn = document.getElementById('restart');
-    const pauseBtn = document.getElementById('pause');
-    const diffSel = document.getElementById('difficulty');
-    const sfxChk = document.getElementById('sfx');
-    const comboFloat = document.getElementById('comboFloat');
-    const toast = document.getElementById('toast');
-    const bossBar = document.getElementById('bossBar');
-    const bossBarInner = document.getElementById('bossBarInner');
-    const lbList = document.getElementById('lbList');
 
-    let W = 0, H = 0, DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    let W = window.innerWidth;
+    let H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+
     function resize() {
-      W = canvas.clientWidth;
-      H = canvas.clientHeight;
-      canvas.width = Math.floor(W * DPR);
-      canvas.height = Math.floor(H * DPR);
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W;
+      canvas.height = H;
     }
     window.addEventListener('resize', resize);
-    resize();
 
-    function rand(a, b) { return a + Math.random() * (b - a); }
-    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-    function chance(p){ return Math.random() < p; }
-
-    // ===== WebAudio SFX =====
-    let audioCtx = null;
-    function ensureAudio(){
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      return audioCtx;
-    }
-    function beep(freq=440, dur=0.08, type='sine', gain=0.08) {
-      if (!sfxChk.checked) return;
-      const ac = ensureAudio();
-      const osc = ac.createOscillator();
-      const g = ac.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      g.gain.value = gain;
-      osc.connect(g).connect(ac.destination);
-      const t = ac.currentTime;
-      osc.start(t);
-      g.gain.setValueAtTime(gain, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      osc.stop(t + dur);
-    }
-    function meow() { beep(620, 0.06, 'triangle', 0.06); beep(500, 0.06, 'triangle', 0.05); }
-    function smack(){ beep(200, 0.05, 'square', 0.09); }
-    function pickup(){ beep(880, 0.05, 'sine', 0.08); beep(1320, 0.06, 'sine', 0.06); }
-    function comboSfx(){ beep(760, 0.07, 'sawtooth', 0.08); }
-
-    // ===== Game State =====
+    let cat = { x: W / 2, y: H / 2, radius: 30, target: null };
+    let roach = { x: Math.random() * W, y: Math.random() * H, radius: 20, alive: true };
     let score = 0;
-    let timeLeft = 60;
-    let paused = false;
-    let over = false;
-    let lastT = 0;
 
-    // Difficulty params
-    const diffs = {
-      easy:   { roachSpeed: [110, 160], catSpeed: 640, bonus: 1.0, count: 1 },
-      normal: { roachSpeed: [160, 240], catSpeed: 760, bonus: 1.2, count: 2 },
-      hard:   { roachSpeed: [240, 320], catSpeed: 880, bonus: 1.4, count: 3 },
-    };
-    let diff = diffs['normal'];
-
-    // Combo system
-    let combo = 1;
-    let comboTimer = 0;
-    const COMBO_WINDOW = 2.2; // seconds to chain
-    function addCombo() {
-      comboTimer = COMBO_WINDOW;
-      combo = Math.min(10, combo + 1);
-      comboEl.textContent = 'x' + combo;
-      comboFloat.textContent = combo >= 3 ? `COMBO x${combo}` : '';
-      if (combo >= 3) {
-        comboFloat.style.opacity = '1';
-        comboFloat.style.transform = 'translateX(-50%) translateY(-6px)';
-        comboSfx();
-        setTimeout(()=>{
-          comboFloat.style.opacity = '0';
-          comboFloat.style.transform = 'translateX(-50%) translateY(0)';
-        }, 260);
-      }
-    }
-    function resetCombo() {
-      combo = 1;
-      comboTimer = 0;
-      comboEl.textContent = 'x1';
-    }
-
-    // Entities
-    const cat = { x: 200, y: 200, r: 26, vx: 0, vy: 0, target: null, cooldown: 0 };
-    let roaches = [];
-    const particles = [];
-    const drops = []; // time extension items
-    let totalCaught = 0;
-    let boss = null; // {x,y, rx, ry, hp, vx, vy}
-
-    function spawnRoach(speedBoost=1) {
-      const rx = 16, ry = 9;
-      const x = rand(60, W - 60);
-      const y = rand(60, H - 60);
-      const ang = rand(0, Math.PI * 2);
-      const spd = rand(...diff.roachSpeed) * speedBoost;
-      roaches.push({ x, y, rx, ry, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, jitter: 0, alive: true, boss:false });
-    }
-
-    function spawnBoss() {
-      const rx = 28, ry = 16;
-      const x = rand(100, W - 100);
-      const y = rand(100, H - 100);
-      const ang = rand(0, Math.PI * 2);
-      const spd = rand(...diff.roachSpeed) * 0.9;
-      boss = { x, y, rx, ry, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, jitter: 0, hp: 3, alive: true, boss:true };
-      bossBar.style.display = 'block';
-      updateBossBar();
-      toastMsg('Boss出现了！需要命中 3 次');
-    }
-    function updateBossBar(){
-      if (!boss) return;
-      const ratio = clamp(boss.hp/3, 0, 1);
-      bossBarInner.style.transform = `scaleX(${ratio})`;
-    }
-
-    function resetWorld() {
-      score = 0; timeLeft = 60; paused = false; over = false; lastT = 0;
-      diff = diffs[diffSel.value];
-      roaches = []; drops.length = 0; particles.length = 0; boss = null;
-      totalCaught = 0; resetCombo();
-      cat.x = W * 0.3; cat.y = H * 0.5; cat.vx = cat.vy = 0; cat.target = null; cat.cooldown = 0;
-      for (let i=0;i<diff.count;i++) spawnRoach();
-      scoreEl.textContent = score;
-      timerEl.textContent = timeLeft.toFixed(1);
-      bossBar.style.display = 'none';
-    }
-
-    // Particles
-    function spawnBurst(x, y, n=12, color='#ffd39e') {
-      for (let i = 0; i < n; i++) {
-        const ang = Math.random() * Math.PI * 2;
-        const spd = rand(80, 220);
-        particles.push({
-          x, y,
-          vx: Math.cos(ang) * spd,
-          vy: Math.sin(ang) * spd,
-          life: rand(0.3, 0.7),
-          r: rand(2, 4),
-          color
-        });
-      }
-    }
-
-    function spawnDrop(x,y){
-      drops.push({x,y,r:10,vy:40,rot:0,alive:true});
-    }
-
-    // Leaderboard (localStorage)
-    function loadLB(){
-      try{
-        return JSON.parse(localStorage.getItem('catRoachLB')||'[]');
-      }catch{ return []; }
-    }
-    function saveLB(arr){
-      localStorage.setItem('catRoachLB', JSON.stringify(arr));
-    }
-    function renderLB(){
-      const arr = loadLB();
-      lbList.innerHTML = '';
-      arr.slice(0,5).forEach((it,idx)=>{
-        const li = document.createElement('li');
-        const d = new Date(it.t);
-        li.textContent = `${it.s} 分（${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}）`;
-        lbList.appendChild(li);
-      });
-    }
-    function pushLB(s){
-      const arr = loadLB();
-      arr.push({s, t: Date.now()});
-      arr.sort((a,b)=>b.s-a.s);
-      saveLB(arr.slice(0,5));
-      renderLB();
-    }
-
-    // Toast
-    let toastTimer = null;
-    function toastMsg(msg){
-      toast.textContent = msg;
-      toast.style.opacity = '1';
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(()=>toast.style.opacity='0', 1200);
-    }
-
-    // ===== Game Loop =====
-    function step(dt) {
-      if (paused || over) return;
-
-      // Timer
-      timeLeft -= dt;
-      if (timeLeft <= 0) {
-        timeLeft = 0; over = true;
-        endGame();
-      }
-      timerEl.textContent = timeLeft.toFixed(1);
-
-      // combo timer
-      if (comboTimer > 0) {
-        comboTimer -= dt;
-        if (comboTimer <= 0) resetCombo();
-      }
-
-      // Cat cooldown
-      cat.cooldown = Math.max(0, cat.cooldown - dt);
-
-      // Move roaches
-      function moveBug(bug){
-        if (!bug.alive) return;
-        bug.x += bug.vx * dt;
-        bug.y += bug.vy * dt;
-        bug.jitter += dt * (bug.boss ? 10 : 20);
-        bug.x += Math.sin(bug.jitter) * (bug.boss ? 0.3 : 0.5);
-        bug.y += Math.cos(bug.jitter*1.2) * (bug.boss ? 0.25 : 0.4);
-        if (bug.x < 30 || bug.x > W - 30) bug.vx *= -1;
-        if (bug.y < 30 || bug.y > H - 30) bug.vy *= -1;
-        bug.x = clamp(bug.x, 20, W-20);
-        bug.y = clamp(bug.y, 20, H-20);
-      }
-      roaches.forEach(moveBug);
-      if (boss) moveBug(boss);
-
-      // Move drops
-      for (let d of drops) {
-        if (!d.alive) continue;
-        d.y += d.vy * dt;
-        d.rot += dt * 4;
-        if (d.y > H - 20) d.vy *= -0.5; // bounce lightly
-      }
-
-      // Move cat toward target
-      if (cat.target) {
-        const dx = cat.target.x - cat.x;
-        const dy = cat.target.y - cat.y;
-        const dist = Math.hypot(dx, dy);
-        const speed = diff.catSpeed;
-        if (dist < 6) {
-          cat.x = cat.target.x;
-          cat.y = cat.target.y;
-          cat.target = null;
-        } else {
-          const vx = (dx / dist) * speed;
-          const vy = (dy / dist) * speed;
-          cat.x += vx * dt;
-          cat.y += vy * dt;
-        }
-      }
-
-      // Collision with roaches
-      function tryCatch(bug){
-        if (!bug.alive) return;
-        const d = Math.hypot(cat.x - bug.x, cat.y - bug.y);
-        if (d < cat.r + Math.max(bug.rx, bug.ry)) {
-          smack();
-          spawnBurst(bug.x, bug.y, bug.boss ? 26 : 18, bug.boss ? '#ffb3a1' : '#ffd39e');
-          if (bug.boss) {
-            bug.hp -= 1; updateBossBar();
-            if (bug.hp <= 0) {
-              bug.alive = false;
-              boss = null; bossBar.style.display='none';
-              addScore(5 * combo);
-              timeLeft = Math.min(120, timeLeft + 8);
-              toastMsg('Boss击败！+8s +5分');
-              meow();
-            } else {
-              // stagger boss a bit
-              bug.vx *= -1.1; bug.vy *= -1.1;
-            }
-          } else {
-            bug.alive = false;
-            addScore(1 * combo);
-            totalCaught += 1;
-            // drop chance
-            if (chance(0.22)) {
-              spawnDrop(bug.x, bug.y);
-            }
-            // respawn normal roach
-            setTimeout(() => spawnRoach(1 + score * 0.02), 220);
-            // boss spawn check
-            if (totalCaught % 8 === 0 && !boss) spawnBoss();
-            addCombo();
-            meow();
-          }
-        }
-      }
-      roaches.forEach(tryCatch);
-      if (boss) tryCatch(boss);
-
-      // Pick drops
-      for (let d of drops) {
-        if (!d.alive) continue;
-        const dist = Math.hypot(cat.x - d.x, cat.y - d.y);
-        if (dist < cat.r + d.r) {
-          d.alive = false;
-          timeLeft = Math.min(120, timeLeft + 5);
-          pickup();
-          toastMsg('+5s');
-        }
-      }
-
-      // Clean up dead roaches (keep array lean)
-      roaches = roaches.filter(r => r.alive || Math.random()>0.02);
-    }
-
-    function addScore(s){
-      score += s;
-      scoreEl.textContent = score;
-    }
-
-    function render() {
-      // background gradient
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, '#0f1221');
-      g.addColorStop(1, '#121733');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, W, H);
-
-      // subtle stars
-      ctx.globalAlpha = 0.25;
-      for (let i = 0; i < 40; i++) {
-        const x = ((i * 97) % W);
-        const y = ((i * 53) % H);
-        ctx.fillRect((x + (i*13)%7), (y + (i*23)%5), 1, 1);
-      }
-      ctx.globalAlpha = 1;
-
-      // entities
-      function drawCat(c) {
-        ctx.save();
-        ctx.translate(c.x, c.y);
-        ctx.globalAlpha = 0.2;
-        ctx.beginPath();
-        ctx.ellipse(0, c.r + 14, c.r * 1.1, c.r * 0.5, 0, 0, Math.PI * 2);
-        ctx.fillStyle = '#000'; ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.arc(0, 0, c.r, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffd39e'; ctx.fill();
-        ctx.lineWidth = 2; ctx.strokeStyle = '#5b3b2b'; ctx.stroke();
-        function ear(angle) {
-          const R = c.r;
-          const ex = Math.cos(angle) * (R * 0.6);
-          const ey = Math.sin(angle) * (R * 0.6);
-          ctx.beginPath();
-          ctx.moveTo(ex, ey);
-          ctx.lineTo(ex + (angle < 0 ? -R*0.5 : R*0.5), ey - R*0.9);
-          ctx.lineTo(ex + (angle < 0 ? -R*0.2 : R*0.2), ey - R*0.2);
-          ctx.closePath();
-          ctx.fillStyle = '#ffd39e'; ctx.fill(); ctx.stroke();
-        }
-        ear(-0.8); ear(0.8);
-        ctx.fillStyle = '#3b2d20';
-        ctx.beginPath(); ctx.arc(-c.r*0.35, -c.r*0.1, 3.8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(c.r*0.35, -c.r*0.1, 3.8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(0, 2); ctx.lineTo(-4, 6); ctx.lineTo(4, 6);
-        ctx.closePath(); ctx.fillStyle = '#e18b7c'; ctx.fill();
-        ctx.strokeStyle = '#5b3b2b'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(-3, 8, 3, Math.PI*1.1, Math.PI*1.9);
-        ctx.arc(3, 8, 3, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-c.r*0.6, 4); ctx.lineTo(-c.r*0.1, 4);
-        ctx.moveTo(-c.r*0.6, 8); ctx.lineTo(-c.r*0.1, 8);
-        ctx.moveTo(c.r*0.6, 4); ctx.lineTo(c.r*0.1, 4);
-        ctx.moveTo(c.r*0.6, 8); ctx.lineTo(c.r*0.1, 8);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      function drawRoach(r) {
-        if (!r.alive) return;
-        ctx.save();
-        ctx.translate(r.x, r.y);
-        ctx.fillStyle = r.boss ? '#7b2e20' : '#6b3f2b';
-        ctx.strokeStyle = '#2a1810';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, r.rx, r.ry, 0, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath();
-        ctx.ellipse(-r.rx*0.9, 0, r.rx*0.5, r.ry*0.55, 0, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath();
-        for (let i = -1; i <= 1; i++) {
-          const y = i * r.ry * 0.8;
-          ctx.moveTo(-r.rx*0.4, y); ctx.lineTo(r.rx*0.2, y - 6);
-          ctx.moveTo(-r.rx*0.2, y); ctx.lineTo(r.rx*0.4, y + 6);
-        }
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-r.rx*1.4, -r.ry*0.3); ctx.lineTo(-r.rx*2.1, -r.ry*1.0);
-        ctx.moveTo(-r.rx*1.4, r.ry*0.3); ctx.lineTo(-r.rx*2.1, r.ry*1.0);
-        ctx.stroke();
-        if (r.boss) {
-          ctx.fillStyle = '#ffd39e';
-          ctx.font = 'bold 12px system-ui';
-          ctx.textAlign = 'center';
-          ctx.fillText(`HP:${r.hp}`, 0, -r.ry - 10);
-        }
-        ctx.restore();
-      }
-
-      function drawDrop(d) {
-        if (!d.alive) return;
-        ctx.save();
-        ctx.translate(d.x, d.y);
-        ctx.rotate(d.rot);
-        ctx.fillStyle = '#7fd1ff';
-        ctx.strokeStyle = '#00334d';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(0, -8); ctx.lineTo(10, 0); ctx.lineTo(0, 8); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        ctx.restore();
-      }
-
-      roaches.forEach(drawRoach);
-      if (boss) drawRoach(boss);
-      drawCat(cat);
-      drops.forEach(drawDrop);
-
-      particles.forEach(p => {
-        ctx.globalAlpha = Math.max(0, p.life);
-        ctx.fillStyle = p.color || '#ffd39e';
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
-
-      if (over) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.45)';
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.font = 'bold 36px system-ui, sans-serif';
-        ctx.fillText('时间到！', W/2, H/2 - 10);
-        ctx.font = '24px system-ui, sans-serif';
-        ctx.fillText(`最终分数：${score}`, W/2, H/2 + 28);
-        ctx.restore();
-      }
-    }
-
-    function endGame(){
-      pushLB(score);
-      renderLB();
-      toastMsg('已记录到本地排行榜');
-    }
-
-    function loop(t) {
-      if (!lastT) lastT = t;
-      const dt = Math.min(0.033, (t - lastT) / 1000);
-      lastT = t;
-      step(dt);
-      render();
-      requestAnimationFrame(loop);
-    }
-    requestAnimationFrame(loop);
-
-    // ===== Input =====
-    function isPointInEllipse(px, py, cx, cy, rx, ry){
-      const dx = px - cx; const dy = py - cy;
-      return (dx*dx)/(rx*rx) + (dy*dy)/(ry*ry) <= 1.1;
-    }
-    function handleAction(x, y) {
-      if (over || paused) return;
-      // click on any roach -> cat pounce current position of target
-      let target = null;
-      for (let r of roaches) {
-        if (r.alive && isPointInEllipse(x,y,r.x,r.y,r.rx,r.ry)) { target = r; break; }
-      }
-      if (!target && boss && boss.alive && isPointInEllipse(x,y,boss.x,boss.y,boss.rx,boss.ry)) {
-        target = boss;
-      }
-      if (target && cat.cooldown <= 0) {
-        cat.target = { x: target.x, y: target.y };
-        cat.cooldown = 0.2;
-        // roach panic
-        target.vx *= -1.05; target.vy *= -1.05;
-      }
-    }
-    canvas.addEventListener('mousedown', e => {
+    canvas.addEventListener("touchstart", function(e) {
       const rect = canvas.getBoundingClientRect();
-      handleAction(e.clientX - rect.left, e.clientY - rect.top);
-      ensureAudio();
-    });
-    canvas.addEventListener('touchstart', e => {
-      const rect = canvas.getBoundingClientRect();
-      const t = e.changedTouches[0];
-      handleAction(t.clientX - rect.left, t.clientY - rect.top);
-      ensureAudio();
+      const touch = e.touches[0];
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      cat.target = { x, y };
       e.preventDefault();
     }, { passive: false });
 
-    // ===== UI =====
-    restartBtn.addEventListener('click', ()=>{ resetWorld(); renderLB(); });
-    pauseBtn.addEventListener('click', () => {
-      paused = !paused;
-      pauseBtn.textContent = paused ? '继续' : '暂停';
-    });
-    diffSel.addEventListener('change', () => { 
-      const keepScore = score;
-      const keepTime = timeLeft;
-      const keepCombo = combo;
-      diff = diffs[diffSel.value];
-      resetWorld();
-      score = keepScore; timeLeft = keepTime; combo = keepCombo;
-      scoreEl.textContent = score; timerEl.textContent = timeLeft.toFixed(1); comboEl.textContent = 'x'+combo;
-    });
+    function moveCat(dt) {
+      if (!cat.target) return;
+      const dx = cat.target.x - cat.x;
+      const dy = cat.target.y - cat.y;
+      const dist = Math.hypot(dx, dy);
+      const speed = 300; // px/sec
+      if (dist < speed * dt) {
+        cat.x = cat.target.x;
+        cat.y = cat.target.y;
+        cat.target = null;
+      } else {
+        cat.x += (dx / dist) * speed * dt;
+        cat.y += (dy / dist) * speed * dt;
+      }
+    }
 
-    // init
-    resetWorld();
-    renderLB();
+    function checkCollision() {
+      if (!roach.alive) return;
+      const dx = cat.x - roach.x;
+      const dy = cat.y - roach.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < cat.radius + roach.radius) {
+        roach.alive = false;
+        score++;
+        setTimeout(() => {
+          roach.x = Math.random() * W;
+          roach.y = Math.random() * H;
+          roach.alive = true;
+        }, 500);
+      }
+    }
+
+    function draw() {
+      ctx.fillStyle = "#0f1221";
+      ctx.fillRect(0, 0, W, H);
+
+      // draw roach
+      if (roach.alive) {
+        ctx.fillStyle = "brown";
+        ctx.beginPath();
+        ctx.arc(roach.x, roach.y, roach.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // draw cat
+      ctx.fillStyle = "orange";
+      ctx.beginPath();
+      ctx.arc(cat.x, cat.y, cat.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // draw score
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + score, 20, 30);
+    }
+
+    let lastTime = null;
+    function gameLoop(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+
+      moveCat(dt);
+      checkCollision();
+      draw();
+
+      requestAnimationFrame(gameLoop);
+    }
+    requestAnimationFrame(gameLoop);
   </script>
 </body>
 </html>
